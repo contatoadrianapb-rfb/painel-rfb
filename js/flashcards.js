@@ -67,9 +67,16 @@ export async function processarRevisao(card, acertou) {
   return { ...card, ...atualizado };
 }
 
-export function flashcardsVencidosHoje(cards) {
+export function flashcardsVencidosHoje(cards, edital = null) {
   const hoje = hojeISO();
-  return cards.filter(c => c.proximaRevisao <= hoje);
+  let vencidos = cards.filter(c => c.proximaRevisao <= hoje);
+  if (edital) {
+    vencidos = vencidos.filter(c => {
+      const m = edital.materias[c.materia];
+      return !m || m.ativa !== false; // matéria inexistente ou ativa passa; inativa é removida
+    });
+  }
+  return vencidos;
 }
 
 export function agruparFlashcardsPorMateria(cards) {

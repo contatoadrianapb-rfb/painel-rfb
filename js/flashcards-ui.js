@@ -176,7 +176,7 @@ window.__fcExcluir = async function(id) {
 
 export async function getFlashcardsVencidosHoje() {
   const cards = await listarFlashcards();
-  return flashcardsVencidosHoje(cards);
+  return flashcardsVencidosHoje(cards, _edital);
 }
 
 export async function renderRevisarHojeTab() {

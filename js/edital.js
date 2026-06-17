@@ -298,8 +298,32 @@ export function getMeta(edital, materia) {
   return (m && m.dificil) ? META_DIFICIL : META_PADRAO;
 }
 
+function isAtiva(dados) {
+  // Matérias antigas (criadas antes desta função existir) não têm o campo
+  // "ativa" definido — tratamos a ausência do campo como ativa por padrão.
+  return dados.ativa !== false;
+}
+
+// Lista apenas matérias ativas — usada em Registrar Sessão, Painel Geral,
+// Histórico, Relatório Semanal e nos avisos de tópico fraco.
 export function listaMaterias(edital) {
+  return Object.keys(edital.materias)
+    .filter(nome => isAtiva(edital.materias[nome]))
+    .sort();
+}
+
+// Lista todas as matérias, ativas e inativas — usada na aba Administração.
+export function listaTodasMaterias(edital) {
   return Object.keys(edital.materias).sort();
+}
+
+export function materiaEstaAtiva(edital, materia) {
+  const m = edital.materias[materia];
+  return m ? isAtiva(m) : false;
+}
+
+export function contarMateriasInativas(edital) {
+  return Object.values(edital.materias).filter(d => !isAtiva(d)).length;
 }
 
 export function listaTopicos(edital, materia) {
@@ -310,7 +334,19 @@ export function listaTopicos(edital, materia) {
 
 export async function adicionarMateria(edital, nome, dificil = false) {
   if (edital.materias[nome]) throw new Error('Matéria já existe.');
-  edital.materias[nome] = { dificil, topicos: [] };
+  edital.materias[nome] = { dificil, ativa: true, topicos: [] };
+  return salvarEdital(edital);
+}
+
+export async function inativarMateria(edital, nome) {
+  if (!edital.materias[nome]) throw new Error('Matéria não encontrada.');
+  edital.materias[nome].ativa = false;
+  return salvarEdital(edital);
+}
+
+export async function reativarMateria(edital, nome) {
+  if (!edital.materias[nome]) throw new Error('Matéria não encontrada.');
+  edital.materias[nome].ativa = true;
   return salvarEdital(edital);
 }
 
@@ -325,7 +361,7 @@ export async function editarMateria(edital, nomeAntigo, nomeNovo, dificil) {
   if (nomeNovo !== nomeAntigo) {
     delete edital.materias[nomeAntigo];
   }
-  edital.materias[nomeNovo] = { dificil, topicos: dados.topicos };
+  edital.materias[nomeNovo] = { dificil, ativa: isAtiva(dados), topicos: dados.topicos };
   return salvarEdital(edital);
 }
 

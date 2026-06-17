@@ -2,8 +2,8 @@
 // UI — Registrar Sessão, Painel Geral, Histórico, Relatório Semanal
 // ─────────────────────────────────────────────────────────────
 import { registrarSessao, excluirSessao, sessoesHoje, agregarPorMateria,
-  getSemanasDisponiveis, filtrarPorSemana, agregarPorTopico, hojeBR } from './sessoes.js';
-import { getMeta, listaMaterias, listaTopicos } from './edital.js';
+  getSemanasDisponiveis, filtrarPorSemana, agregarPorTopico, hojeBR, filtrarSessoesAtivas } from './sessoes.js';
+import { getMeta, listaMaterias, listaTopicos, contarMateriasInativas } from './edital.js';
 
 let _edital = null;
 let _sessoes = [];
@@ -142,22 +142,32 @@ function renderSessoesHoje() {
 // ─── Painel Geral ───
 
 export function renderPainelTab() {
-  if (!_sessoes.length) {
+  const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
+  const inativasCount = contarMateriasInativas(_edital);
+  const avisoEl = document.getElementById('painel-aviso-inativas');
+  if (avisoEl) {
+    avisoEl.textContent = inativasCount > 0
+      ? `${inativasCount} matéria${inativasCount > 1 ? 's' : ''} inativa${inativasCount > 1 ? 's' : ''} (oculta${inativasCount > 1 ? 's' : ''}) — ver na Administração`
+      : '';
+    avisoEl.style.display = inativasCount > 0 ? 'block' : 'none';
+  }
+
+  if (!sessoesAtivas.length) {
     ['painel-total', 'painel-acertos', 'painel-materias'].forEach(id => document.getElementById(id).textContent = '0');
     document.getElementById('painel-pct').textContent = '—';
     document.getElementById('painel-barras').innerHTML = '<div class="empty">Registre sessões para ver o desempenho por matéria.</div>';
     return;
   }
-  const totG = _sessoes.reduce((a, s) => a + s.total, 0);
-  const cerG = _sessoes.reduce((a, s) => a + s.acertos, 0);
+  const totG = sessoesAtivas.reduce((a, s) => a + s.total, 0);
+  const cerG = sessoesAtivas.reduce((a, s) => a + s.acertos, 0);
   const pG = Math.round((cerG / totG) * 100);
   document.getElementById('painel-total').textContent = totG;
   document.getElementById('painel-acertos').textContent = cerG;
   const pEl = document.getElementById('painel-pct'); pEl.textContent = pG + '%'; pEl.style.color = bc(pG, 89);
 
-  const mats = agregarPorMateria(_sessoes);
+  const mats = agregarPorMateria(sessoesAtivas);
   document.getElementById('painel-materias').textContent = Object.keys(mats).length;
-  const topicosUnicos = new Set(_sessoes.filter(s => s.topico && !s.topico.includes('não selecionado')).map(s => s.materia + '::' + s.topico));
+  const topicosUnicos = new Set(sessoesAtivas.filter(s => s.topico && !s.topico.includes('não selecionado')).map(s => s.materia + '::' + s.topico));
   document.getElementById('painel-topicos').textContent = topicosUnicos.size;
 
   const sorted = Object.entries(mats).sort((a, b) => Math.round(a[1].acertos / a[1].total * 100) - Math.round(b[1].acertos / b[1].total * 100));
@@ -173,8 +183,8 @@ export function renderPainelTab() {
   });
   document.getElementById('painel-barras').innerHTML = bh;
 
-  const labels = _sessoes.map((_, i) => String(i + 1));
-  const data = _sessoes.map(s => s.pct);
+  const labels = sessoesAtivas.map((_, i) => String(i + 1));
+  const data = sessoesAtivas.map(s => s.pct);
   const ctx = document.getElementById('evolChart');
   if (!ctx) return;
   if (!evolChart) {
@@ -191,10 +201,11 @@ export function renderPainelTab() {
 // ─── Histórico ───
 
 export function renderHistoricoTab() {
+  const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
   const tbody = document.getElementById('hist-corpo');
-  if (!_sessoes.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Nenhuma sessão registrada.</div></td></tr>'; return; }
+  if (!sessoesAtivas.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Nenhuma sessão registrada.</div></td></tr>'; return; }
   let html = '';
-  [..._sessoes].reverse().forEach(s => {
+  [...sessoesAtivas].reverse().forEach(s => {
     const meta = getMeta(_edital, s.materia);
     const ok = s.pct >= meta, warn = s.pct >= (meta - 10);
     const badge = ok ? 'bok' : warn ? 'bwn' : 'bda';
@@ -213,7 +224,8 @@ export function renderHistoricoTab() {
 // ─── Relatório Semanal ───
 
 export function renderRelatorioTab() {
-  const semanas = getSemanasDisponiveis(_sessoes);
+  const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
+  const semanas = getSemanasDisponiveis(sessoesAtivas);
   const sel = document.getElementById('rel-semana');
   const cur = sel.value;
   sel.innerHTML = '<option value="all">Todas as sessões</option>';
@@ -231,7 +243,8 @@ window.__relAtualizar = renderRelatorioConteudo;
 
 function renderRelatorioConteudo() {
   const sel = document.getElementById('rel-semana');
-  const sf = filtrarPorSemana(_sessoes, sel ? sel.value : 'all');
+  const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
+  const sf = filtrarPorSemana(sessoesAtivas, sel ? sel.value : 'all');
   const rc = document.getElementById('rel-conteudo');
   const cd = document.getElementById('rel-cronograma');
   const rm = document.getElementById('rel-metricas');

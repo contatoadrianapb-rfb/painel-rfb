@@ -4,7 +4,8 @@
 import {
   adicionarMateria, removerMateria, editarMateria,
   adicionarTopico, editarTopico, removerTopico,
-  marcarRevisado, marcarDesatualizado
+  marcarRevisado, marcarDesatualizado,
+  inativarMateria, reativarMateria, listaTodasMaterias
 } from './edital.js';
 
 let _edital = null;
@@ -60,7 +61,7 @@ window.__adminMarcarDesatualizado = async function() {
 
 function renderListaMaterias() {
   const container = document.getElementById('admin-materias-lista');
-  const nomes = Object.keys(_edital.materias).sort();
+  const nomes = listaTodasMaterias(_edital);
   if (!nomes.length) {
     container.innerHTML = '<div class="empty">Nenhuma matéria cadastrada.</div>';
     return;
@@ -69,20 +70,28 @@ function renderListaMaterias() {
   nomes.forEach(nome => {
     const dados = _edital.materias[nome];
     const isOpen = !!_openState[nome];
+    const ativa = dados.ativa !== false;
+    const opacidade = ativa ? '' : 'opacity:.55;';
     html += `
-    <div class="admin-materia">
+    <div class="admin-materia" style="${opacidade}">
       <div class="admin-materia-header" onclick="window.__adminToggle('${escapeAttr(nome)}')">
         <div class="admin-materia-title">
           <span class="chevron ${isOpen ? 'open' : ''}" id="chev-${slug(nome)}">▶</span>
           ${nome} ${dados.dificil ? '<span style="color:var(--p);font-size:11px">⚠ difícil</span>' : ''}
+          ${!ativa ? '<span class="badge bwn" style="margin-left:4px">Inativa</span>' : ''}
           <span style="color:var(--t3);font-weight:400;font-size:11px">(${dados.topicos.length} tópicos)</span>
         </div>
         <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+          ${ativa
+            ? `<button class="btn btn-sm" onclick="window.__adminInativar('${escapeAttr(nome)}')">Inativar</button>`
+            : `<button class="btn btn-sm btn-p" onclick="window.__adminReativar('${escapeAttr(nome)}')">Reativar</button>`
+          }
           <button class="btn btn-sm" onclick="window.__adminEditarMateria('${escapeAttr(nome)}')">Editar</button>
           <button class="btn btn-sm btn-danger" onclick="window.__adminRemoverMateria('${escapeAttr(nome)}')">Excluir</button>
         </div>
       </div>
       <div class="admin-materia-body ${isOpen ? 'open' : ''}" id="body-${slug(nome)}">
+        ${!ativa ? '<p class="hint">Esta matéria está inativa: não aparece em Registrar Sessão, Painel Geral, Histórico, Relatório Semanal ou nos avisos de flashcard. O histórico já registrado é preservado e volta a contar normalmente ao reativar.</p>' : ''}
         <div id="topicos-${slug(nome)}">
           ${dados.topicos.map((t, i) => `
             <div class="admin-topico-row">
@@ -100,6 +109,18 @@ function renderListaMaterias() {
   });
   container.innerHTML = html;
 }
+
+window.__adminInativar = async function(nome) {
+  await inativarMateria(_edital, nome);
+  await notificarMudanca();
+  renderListaMaterias();
+};
+
+window.__adminReativar = async function(nome) {
+  await reativarMateria(_edital, nome);
+  await notificarMudanca();
+  renderListaMaterias();
+};
 
 function slug(s) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '_');

@@ -2,7 +2,7 @@
 // Módulo de Sessões — registro de questões, histórico, agregações
 // ─────────────────────────────────────────────────────────────
 import { getAllDocs, addDocument, deleteDocument } from './firebase-config.js';
-import { getMeta } from './edital.js';
+import { getMeta, materiaEstaAtiva } from './edital.js';
 
 function hojeBR() {
   const d = new Date();
@@ -78,6 +78,7 @@ export function topicosFracos(sessoes, edital) {
   const tops = agregarPorTopico(sessoes);
   const fracos = [];
   Object.values(tops).forEach(t => {
+    if (!materiaEstaAtiva(edital, t.materia)) return; // ignora matérias inativas
     const pct = Math.round((t.acertos / t.total) * 100);
     const meta = getMeta(edital, t.materia);
     if (pct < meta) {
@@ -93,6 +94,13 @@ export function getSemanasDisponiveis(sessoes) {
 
 export function filtrarPorSemana(sessoes, semana) {
   return semana === 'all' ? sessoes : sessoes.filter(s => s.semana === semana);
+}
+
+// Remove sessões cuja matéria está inativada no edital. Usada antes de
+// qualquer agregação exibida em Painel Geral, Histórico e Relatório Semanal,
+// para que matérias inativas fiquem completamente fora dessas visões.
+export function filtrarSessoesAtivas(sessoes, edital) {
+  return sessoes.filter(s => materiaEstaAtiva(edital, s.materia));
 }
 
 export { hojeBR, semanaISO };
