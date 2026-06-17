@@ -35,6 +35,8 @@
     <button class="tab" data-tab="revisar" onclick="window.__mudarAba('revisar', this)">Revisar Hoje</button>
     <button class="tab" data-tab="registro" onclick="window.__mudarAba('registro', this)">Registrar Sessão</button>
     <button class="tab" data-tab="flashcards" onclick="window.__mudarAba('flashcards', this)">Flashcards</button>
+    <button class="tab" data-tab="cronograma" onclick="window.__mudarAba('cronograma', this)">Cronograma</button>
+    <button class="tab" data-tab="frequencia" onclick="window.__mudarAba('frequencia', this)">Frequência</button>
     <button class="tab" data-tab="painel" onclick="window.__mudarAba('painel', this)">Painel Geral</button>
     <button class="tab" data-tab="historico" onclick="window.__mudarAba('historico', this)">Histórico</button>
     <button class="tab" data-tab="relatorio" onclick="window.__mudarAba('relatorio', this)">Relatório Semanal</button>
@@ -55,18 +57,43 @@
     <div class="alert" id="reg-alert"><p></p></div>
     <div class="succ" id="reg-success"><p></p></div>
     <div class="card">
-      <div class="ct">Nova sessão — Tec Concursos</div>
-      <div class="fr">
-        <select id="reg-materia" onchange="window.__regPopularTopicos()">
-          <option value="">Matéria...</option>
+      <div class="ct">Nova sessão</div>
+      <div class="field" style="max-width:280px">
+        <label>Tipo de sessão</label>
+        <select id="reg-tipo-sessao" onchange="window.__regMudarTipo()">
+          <option value="questoes">Questões — Tec Concursos</option>
+          <option value="teoria">Teoria / Revisão (videoaula, lei seca, resumo...)</option>
         </select>
-        <select id="reg-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
-        <input type="number" id="reg-total" placeholder="Total q." min="1">
-        <input type="number" id="reg-acertos" placeholder="Acertos" min="0">
-        <input type="text" id="reg-data" placeholder="dd/mm/aa">
-        <button class="btn btn-p" onclick="window.__regAdicionar()">+ Adicionar</button>
       </div>
-      <p class="hint">Os tópicos vêm da Administração do Edital. Data preenchida automaticamente se deixada em branco.</p>
+
+      <div id="reg-form-questoes">
+        <div class="fr">
+          <select id="reg-materia" onchange="window.__regPopularTopicos()">
+            <option value="">Matéria...</option>
+          </select>
+          <select id="reg-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
+          <input type="number" id="reg-total" placeholder="Total q." min="1">
+          <input type="number" id="reg-acertos" placeholder="Acertos" min="0">
+          <input type="text" id="reg-data" placeholder="dd/mm/aa">
+          <button class="btn btn-p" onclick="window.__regAdicionar()">+ Adicionar</button>
+        </div>
+        <p class="hint">Os tópicos vêm da Administração do Edital. Data preenchida automaticamente se deixada em branco.</p>
+      </div>
+
+      <div id="reg-form-teoria" style="display:none">
+        <div class="fr" style="grid-template-columns:1.6fr 1.6fr 1.2fr .7fr .7fr 1fr auto">
+          <select id="regt-materia" onchange="window.__regtPopularTopicos()">
+            <option value="">Matéria...</option>
+          </select>
+          <select id="regt-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
+          <select id="regt-tipo-material"><option value="">Tipo de material...</option></select>
+          <input type="number" id="regt-horas" placeholder="Horas" min="0">
+          <input type="number" id="regt-minutos" placeholder="Min" min="0" max="59">
+          <input type="text" id="regt-data" placeholder="dd/mm/aa">
+          <button class="btn btn-p" onclick="window.__regtAdicionar()">+ Adicionar</button>
+        </div>
+        <p class="hint">Use para videoaulas, leitura de lei seca, resumos ou qualquer estudo sem resolução de questões. Não gera percentual de aproveitamento, mas conta no seu tempo total dedicado à matéria.</p>
+      </div>
     </div>
     <div class="card">
       <div class="ct" id="reg-hoje-titulo">Sessões de hoje</div>
@@ -76,6 +103,7 @@
         <div class="mc"><div class="ml">Acertos</div><div class="mv" id="reg-hoje-acertos">0</div></div>
         <div class="mc"><div class="ml">% hoje</div><div class="mv" id="reg-hoje-pct">—</div><div class="ms">Meta: 89%</div></div>
         <div class="mc"><div class="ml">Sessões</div><div class="mv" id="reg-hoje-sessoes">0</div></div>
+        <div class="mc"><div class="ml">Teoria hoje</div><div class="mv" id="reg-hoje-teoria">0min</div></div>
       </div>
     </div>
   </div>
@@ -130,6 +158,67 @@
     </div>
   </div>
 
+  <!-- CRONOGRAMA -->
+  <div class="view" id="view-cronograma">
+    <div class="card">
+      <div class="ct">1. Matérias deste período</div>
+      <p class="hint">Selecione quais matérias entram no cronograma agora. Você pode mudar quando quiser — o cronograma recalcula automaticamente.</p>
+      <div id="cron-materias-lista"></div>
+    </div>
+
+    <div class="card">
+      <div class="ct">2. Sua disponibilidade</div>
+      <div class="field">
+        <label>Como prefere informar seu tempo disponível?</label>
+        <select id="cron-modo" onchange="window.__cronMudarModo()">
+          <option value="semanal">Total de horas por semana</option>
+          <option value="diaria">Horas específicas por dia da semana</option>
+        </select>
+      </div>
+      <div id="cron-semanal-box">
+        <div class="field">
+          <label>Horas disponíveis na semana</label>
+          <input type="number" id="cron-horas-semanais" min="0" step="0.5" placeholder="Ex: 20" onchange="window.__cronAtualizarHorasSemanais()">
+        </div>
+      </div>
+      <div id="cron-diaria-box" style="display:none">
+        <div id="cron-dias-container"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ct">Cronograma personalizado</div>
+      <div id="cron-resultado"><div class="empty">Configure as matérias e disponibilidade acima.</div></div>
+    </div>
+  </div>
+
+  <!-- FREQUÊNCIA DE COBRANÇA -->
+  <div class="view" id="view-frequencia">
+    <div class="card">
+      <div class="ct">Bancas de referência</div>
+      <div id="freq-bancas-ativas"></div>
+    </div>
+
+    <div class="alert" id="freq-alert"><p></p></div>
+
+    <div class="card">
+      <div class="ct">Registrar dado do Tec Concursos</div>
+      <p class="hint">Extraia no Tec Concursos o percentual de cobrança e a quantidade de questões de um tópico, filtrando pela banca e período desejados, e registre aqui.</p>
+      <div class="fr" style="grid-template-columns:1.6fr 1.6fr 1fr .8fr .8fr auto">
+        <select id="freq-materia" onchange="window.__freqPopularTopicos()"><option value="">Matéria...</option></select>
+        <select id="freq-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
+        <select id="freq-banca"><option value="">Banca...</option></select>
+        <input type="number" id="freq-pct" placeholder="% cobr." min="0" max="100" step="0.1">
+        <input type="number" id="freq-questoes" placeholder="Quest." min="0">
+        <button class="btn btn-p" onclick="window.__freqRegistrar()">+ Registrar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="freq-ranking"><div class="empty">Selecione uma matéria acima para ver o ranking de tópicos.</div></div>
+    </div>
+  </div>
+
   <!-- PAINEL GERAL -->
   <div class="view" id="view-painel">
     <div class="mg">
@@ -139,6 +228,7 @@
       <div class="mc"><div class="ml">Matérias</div><div class="mv" id="painel-materias">0</div></div>
       <div class="mc"><div class="ml">Tópicos</div><div class="mv" id="painel-topicos">0</div></div>
     </div>
+    <p class="hint" id="painel-aviso-inativas" style="display:none;cursor:pointer" onclick="window.__mudarAba('admin', document.querySelector('[data-tab=admin]'))"></p>
     <div class="card">
       <div class="ct">Aproveitamento por matéria</div>
       <p class="hint">Linha vermelha = meta — ordenado do mais fraco ao mais forte</p>
@@ -150,12 +240,16 @@
         <canvas id="evolChart" role="img" aria-label="Evolução do aproveitamento por sessão"></canvas>
       </div>
     </div>
+    <div class="card">
+      <div class="ct">Teoria / Revisão</div>
+      <div id="painel-teoria-box"><div class="empty">Nenhuma sessão de teoria/revisão registrada ainda.</div></div>
+    </div>
   </div>
 
   <!-- HISTÓRICO -->
   <div class="view" id="view-historico">
     <div class="card">
-      <div class="ct">Todas as sessões</div>
+      <div class="ct">Questões</div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -164,6 +258,19 @@
             <th style="width:21%">Aproveit.</th><th style="width:8%">Status</th><th style="width:6%"></th>
           </tr></thead>
           <tbody id="hist-corpo"><tr><td colspan="8"><div class="empty">Nenhuma sessão registrada.</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">Teoria / Revisão</div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th style="width:20%">Matéria</th><th style="width:32%">Tópico</th>
+            <th style="width:18%">Material</th><th style="width:12%">Data</th>
+            <th style="width:12%">Tempo</th><th style="width:6%"></th>
+          </tr></thead>
+          <tbody id="hist-teoria-corpo"><tr><td colspan="5"><div class="empty">Nenhuma sessão de teoria/revisão registrada.</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -176,6 +283,10 @@
       <select id="rel-semana" onchange="window.__relAtualizar()"><option value="all">Todas as sessões</option></select>
     </div>
     <div id="rel-metricas" style="margin-bottom:1.2rem"></div>
+    <div class="card">
+      <div class="ct">Teoria / Revisão no período</div>
+      <div id="rel-teoria-box"><div class="empty">Nenhuma sessão de teoria/revisão neste período.</div></div>
+    </div>
     <div class="card"><div id="rel-conteudo"><div class="empty">Registre sessões para gerar o relatório.</div></div></div>
     <div class="card">
       <div class="ct">Pontos fortes vs fracos</div>
@@ -202,6 +313,14 @@
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <input type="checkbox" id="admin-nova-dificil" style="width:auto;height:auto">
         <label style="margin:0">Marcar como matéria difícil (meta interna 92%)</label>
+      </div>
+      <div class="field">
+        <label>Peso da matéria no edital</label>
+        <select id="admin-novo-peso">
+          <option value="1">Peso 1 — demais matérias</option>
+          <option value="2">Peso 2 — maior valor na prova (mais questões ou muito difícil)</option>
+          <option value="3">Peso 3 — também cai na prova discursiva</option>
+        </select>
       </div>
       <button class="btn btn-p" onclick="window.__adminAdicionarMateria()">+ Adicionar matéria</button>
     </div>
