@@ -9,6 +9,8 @@ import {
   initSessoesUI, atualizarContextoSessoes,
   renderRegistroTab, renderPainelTab, renderHistoricoTab, renderRelatorioTab
 } from './sessoes-ui.js';
+import { initCronogramaUI, atualizarContextoCronograma, renderCronogramaTab } from './cronograma-ui.js';
+import { initFrequenciaUI, atualizarContextoFrequencia, renderFrequenciaTab } from './frequencia-ui.js';
 
 let _edital = null;
 let _sessoes = [];
@@ -23,6 +25,7 @@ async function recarregarENotificar() {
   await carregarTudo();
   atualizarContextoSessoes(_edital, _sessoes);
   atualizarContextoFlashcards(_edital, _sessoes);
+  atualizarContextoCronograma(_edital, _sessoes);
   await refreshAbaAtiva();
   await atualizarBadgeRevisarHoje();
   atualizarBannerEdital();
@@ -32,6 +35,8 @@ async function onAdminChange(novoEdital) {
   _edital = novoEdital;
   atualizarContextoSessoes(_edital, _sessoes);
   atualizarContextoFlashcards(_edital, _sessoes);
+  atualizarContextoCronograma(_edital, _sessoes);
+  atualizarContextoFrequencia(_edital);
   atualizarBannerEdital();
 }
 
@@ -68,6 +73,8 @@ const ABA_RENDERERS = {
   revisar: renderRevisarHojeTab,
   registro: renderRegistroTab,
   flashcards: renderFlashcardsTab,
+  cronograma: renderCronogramaTab,
+  frequencia: renderFrequenciaTab,
   painel: renderPainelTab,
   historico: renderHistoricoTab,
   relatorio: renderRelatorioTab,
@@ -96,6 +103,8 @@ async function init() {
   initSessoesUI(_edital, _sessoes, recarregarENotificar);
   initFlashcardsUI(_edital, _sessoes, () => {});
   initAdminUI(_edital, onAdminChange);
+  initCronogramaUI(_edital, _sessoes);
+  initFrequenciaUI(_edital);
 
   document.getElementById('hdr-data').textContent =
     new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

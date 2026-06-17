@@ -19,6 +19,8 @@ function semanaISO(dataBR) {
   return d.getFullYear() + '-W' + String(wk).padStart(2, '0');
 }
 
+export const TIPOS_MATERIAL = ['Videoaula', 'Leitura de lei', 'Resumo', 'Revisão', 'Outro'];
+
 export async function listarSessoes() {
   const sessoes = await getAllDocs('sessoes');
   // ordenado por ordem de criação (assumindo IDs crescentes do Firestore não garantem ordem;
@@ -26,11 +28,29 @@ export async function listarSessoes() {
   return sessoes.sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
 }
 
+// Sessão de questões (Tec Concursos) — comportamento original, com aproveitamento %
 export async function registrarSessao({ materia, topico, total, acertos, data }) {
   const dataFinal = data || hojeBR();
   const pct = Math.round((acertos / total) * 100);
   const sessao = {
+    tipo: 'questoes',
     materia, topico, total, acertos, pct,
+    data: dataFinal,
+    semana: semanaISO(dataFinal),
+    ordem: Date.now()
+  };
+  return addDocument('sessoes', sessao);
+}
+
+// Sessão de teoria/revisão — sem questões nem aproveitamento, registra tempo dedicado
+export async function registrarSessaoTeoria({ materia, topico, tipoMaterial, horas, minutos, data }) {
+  const dataFinal = data || hojeBR();
+  const duracaoMin = (Number(horas) || 0) * 60 + (Number(minutos) || 0);
+  const sessao = {
+    tipo: 'teoria',
+    materia, topico,
+    tipoMaterial: tipoMaterial || 'Outro',
+    duracaoMin,
     data: dataFinal,
     semana: semanaISO(dataFinal),
     ordem: Date.now()
@@ -40,6 +60,27 @@ export async function registrarSessao({ materia, topico, total, acertos, data })
 
 export async function excluirSessao(id) {
   return deleteDocument('sessoes', id);
+}
+
+// Sessões antigas não têm o campo "tipo" — tratamos a ausência como 'questoes'
+// para manter compatibilidade com todo o histórico já registrado.
+export function ehSessaoQuestoes(s) { return (s.tipo || 'questoes') === 'questoes'; }
+export function ehSessaoTeoria(s) { return s.tipo === 'teoria'; }
+
+export function sessoesQuestoes(sessoes) { return sessoes.filter(ehSessaoQuestoes); }
+export function sessoesTeoria(sessoes) { return sessoes.filter(ehSessaoTeoria); }
+
+export function formatarDuracao(min) {
+  if (!min || min <= 0) return '0min';
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${m}min`;
+}
+
+export function totalMinutosTeoria(sessoesDeTeoria) {
+  return sessoesDeTeoria.reduce((a, s) => a + (s.duracaoMin || 0), 0);
 }
 
 export function sessoesDoDia(sessoes, dataBR) {
@@ -52,7 +93,7 @@ export function sessoesHoje(sessoes) {
 
 export function agregarPorMateria(sessoes) {
   const mats = {};
-  sessoes.forEach(s => {
+  sessoesQuestoes(sessoes).forEach(s => {
     if (!mats[s.materia]) mats[s.materia] = { total: 0, acertos: 0 };
     mats[s.materia].total += s.total;
     mats[s.materia].acertos += s.acertos;
@@ -60,9 +101,21 @@ export function agregarPorMateria(sessoes) {
   return mats;
 }
 
+// Agrega minutos de teoria/revisão por matéria — usado no Painel Geral e
+// no Relatório Semanal, exibido separado das métricas de questões.
+export function agregarTeoriaPorMateria(sessoes) {
+  const mats = {};
+  sessoesTeoria(sessoes).forEach(s => {
+    if (!mats[s.materia]) mats[s.materia] = { minutos: 0, sessoes: 0 };
+    mats[s.materia].minutos += (s.duracaoMin || 0);
+    mats[s.materia].sessoes += 1;
+  });
+  return mats;
+}
+
 export function agregarPorTopico(sessoes) {
   const tops = {};
-  sessoes.forEach(s => {
+  sessoesQuestoes(sessoes).forEach(s => {
     if (!s.topico || s.topico.includes('não selecionado')) return;
     const chave = s.materia + '::' + s.topico;
     if (!tops[chave]) tops[chave] = { materia: s.materia, topico: s.topico, total: 0, acertos: 0 };

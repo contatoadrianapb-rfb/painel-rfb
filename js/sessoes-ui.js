@@ -2,7 +2,9 @@
 // UI — Registrar Sessão, Painel Geral, Histórico, Relatório Semanal
 // ─────────────────────────────────────────────────────────────
 import { registrarSessao, excluirSessao, sessoesHoje, agregarPorMateria,
-  getSemanasDisponiveis, filtrarPorSemana, agregarPorTopico, hojeBR, filtrarSessoesAtivas } from './sessoes.js';
+  getSemanasDisponiveis, filtrarPorSemana, agregarPorTopico, hojeBR, filtrarSessoesAtivas,
+  registrarSessaoTeoria, sessoesQuestoes, sessoesTeoria, agregarTeoriaPorMateria,
+  formatarDuracao, totalMinutosTeoria, TIPOS_MATERIAL } from './sessoes.js';
 import { getMeta, listaMaterias, listaTopicos, contarMateriasInativas } from './edital.js';
 
 let _edital = null;
@@ -33,8 +35,77 @@ export function renderRegistroTab() {
     o.value = m; o.textContent = m;
     matSel.appendChild(o);
   });
+
+  const matSelT = document.getElementById('regt-materia');
+  matSelT.innerHTML = '<option value="">Matéria...</option>';
+  listaMaterias(_edital).forEach(m => {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    matSelT.appendChild(o);
+  });
+
+  const tipoMaterialSel = document.getElementById('regt-tipo-material');
+  if (tipoMaterialSel.options.length <= 1) {
+    tipoMaterialSel.innerHTML = '<option value="">Tipo de material...</option>';
+    TIPOS_MATERIAL.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      tipoMaterialSel.appendChild(o);
+    });
+  }
+
   renderSessoesHoje();
 }
+
+window.__regMudarTipo = function() {
+  const tipo = document.getElementById('reg-tipo-sessao').value;
+  document.getElementById('reg-form-questoes').style.display = tipo === 'questoes' ? 'block' : 'none';
+  document.getElementById('reg-form-teoria').style.display = tipo === 'teoria' ? 'block' : 'none';
+};
+
+window.__regtPopularTopicos = function() {
+  const mat = document.getElementById('regt-materia').value;
+  const sel = document.getElementById('regt-topico');
+  sel.innerHTML = '';
+  const topicos = listaTopicos(_edital, mat);
+  if (!mat || !topicos.length) {
+    sel.innerHTML = '<option value="">Selecione a matéria primeiro...</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.innerHTML = '<option value="">Tópico do edital...</option>';
+  topicos.forEach((t, i) => {
+    const o = document.createElement('option');
+    o.value = t; o.textContent = (i + 1) + '. ' + t;
+    sel.appendChild(o);
+  });
+  sel.disabled = false;
+};
+
+window.__regtAdicionar = async function() {
+  const materia = document.getElementById('regt-materia').value;
+  if (!materia) { regFlash('alert', 'Selecione uma matéria.'); return; }
+  const topico = document.getElementById('regt-topico').value || '(tópico não selecionado)';
+  const tipoMaterial = document.getElementById('regt-tipo-material').value || 'Outro';
+  const horas = parseFloat(document.getElementById('regt-horas').value) || 0;
+  const minutos = parseFloat(document.getElementById('regt-minutos').value) || 0;
+  const data = document.getElementById('regt-data').value.trim() || undefined;
+
+  if (horas <= 0 && minutos <= 0) { regFlash('alert', 'Informe o tempo dedicado (horas e/ou minutos).'); return; }
+
+  await registrarSessaoTeoria({ materia, topico, tipoMaterial, horas, minutos, data });
+
+  document.getElementById('regt-materia').value = '';
+  document.getElementById('regt-topico').innerHTML = '<option value="">Selecione a matéria primeiro...</option>';
+  document.getElementById('regt-topico').disabled = true;
+  document.getElementById('regt-tipo-material').value = '';
+  document.getElementById('regt-horas').value = '';
+  document.getElementById('regt-minutos').value = '';
+  document.getElementById('regt-data').value = '';
+
+  regFlash('success', `${materia} · ${tipoMaterial}: ${formatarDuracao(horas * 60 + minutos)} registrados.`);
+  if (_onChangeCallback) await _onChangeCallback();
+};
 
 window.__regPopularTopicos = function() {
   const mat = document.getElementById('reg-materia').value;
@@ -103,40 +174,61 @@ window.__regExcluir = async function(id) {
 };
 
 function renderSessoesHoje() {
-  const hoje = hojeBR();
-  const ts = sessoesHoje(_sessoes);
+  const todasHoje = sessoesHoje(_sessoes);
+  const ts = sessoesQuestoes(todasHoje);
+  const tt = sessoesTeoria(todasHoje);
   const list = document.getElementById('reg-hoje-lista');
   const metricsDiv = document.getElementById('reg-hoje-metricas');
   const now = new Date();
   document.getElementById('reg-hoje-titulo').textContent =
     'Sessões de hoje — ' + now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  if (!ts.length) {
+  if (!ts.length && !tt.length) {
     list.innerHTML = '<div class="empty">Nenhuma sessão registrada hoje ainda.</div>';
     metricsDiv.style.display = 'none';
     return;
   }
+
+  let html = '';
   let tT = 0, tC = 0;
-  let html = '<div style="overflow-x:auto"><table><thead><tr><th style="width:22%">Matéria</th><th style="width:32%">Tópico</th><th style="width:7%">Total</th><th style="width:7%">Acertos</th><th style="width:26%">Aproveit.</th><th></th></tr></thead><tbody>';
-  ts.forEach(s => {
-    tT += s.total; tC += s.acertos;
-    const meta = getMeta(_edital, s.materia);
-    const cor = bc(s.pct, meta);
-    html += `<tr><td title="${s.materia}">${s.materia}</td>
-      <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
-      <td>${s.total}</td><td>${s.acertos}</td>
-      <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
-      <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
-  });
-  html += '</tbody></table></div>';
+
+  if (ts.length) {
+    html += '<div class="rt">Questões</div><div style="overflow-x:auto"><table><thead><tr><th style="width:22%">Matéria</th><th style="width:32%">Tópico</th><th style="width:7%">Total</th><th style="width:7%">Acertos</th><th style="width:26%">Aproveit.</th><th></th></tr></thead><tbody>';
+    ts.forEach(s => {
+      tT += s.total; tC += s.acertos;
+      const meta = getMeta(_edital, s.materia);
+      const cor = bc(s.pct, meta);
+      html += `<tr><td title="${s.materia}">${s.materia}</td>
+        <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
+        <td>${s.total}</td><td>${s.acertos}</td>
+        <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
+        <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
+  if (tt.length) {
+    if (ts.length) html += '<div class="sep"></div>';
+    html += '<div class="rt">Teoria / Revisão</div><div style="overflow-x:auto"><table><thead><tr><th style="width:24%">Matéria</th><th style="width:34%">Tópico</th><th style="width:18%">Material</th><th style="width:14%">Tempo</th><th></th></tr></thead><tbody>';
+    tt.forEach(s => {
+      html += `<tr><td title="${s.materia}">${s.materia}</td>
+        <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
+        <td style="font-size:11px;color:var(--t2)">${s.tipoMaterial || 'Outro'}</td>
+        <td>${formatarDuracao(s.duracaoMin)}</td>
+        <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+    });
+    html += '</tbody></table></div>';
+  }
+
   list.innerHTML = html;
   metricsDiv.style.display = 'grid';
-  const pH = Math.round((tC / tT) * 100);
+  const pH = tT > 0 ? Math.round((tC / tT) * 100) : 0;
   document.getElementById('reg-hoje-total').textContent = tT;
   document.getElementById('reg-hoje-acertos').textContent = tC;
   document.getElementById('reg-hoje-sessoes').textContent = ts.length;
   const pEl = document.getElementById('reg-hoje-pct');
-  pEl.textContent = pH + '%'; pEl.style.color = bc(pH, 89);
+  pEl.textContent = tT > 0 ? pH + '%' : '—'; pEl.style.color = bc(pH, 89);
+  document.getElementById('reg-hoje-teoria').textContent = formatarDuracao(totalMinutosTeoria(tt));
 }
 
 // ─── Painel Geral ───
@@ -152,49 +244,74 @@ export function renderPainelTab() {
     avisoEl.style.display = inativasCount > 0 ? 'block' : 'none';
   }
 
-  if (!sessoesAtivas.length) {
+  const sessoesQuest = sessoesQuestoes(sessoesAtivas);
+  const sessoesTeo = sessoesTeoria(sessoesAtivas);
+
+  if (!sessoesQuest.length) {
     ['painel-total', 'painel-acertos', 'painel-materias'].forEach(id => document.getElementById(id).textContent = '0');
     document.getElementById('painel-pct').textContent = '—';
-    document.getElementById('painel-barras').innerHTML = '<div class="empty">Registre sessões para ver o desempenho por matéria.</div>';
-    return;
-  }
-  const totG = sessoesAtivas.reduce((a, s) => a + s.total, 0);
-  const cerG = sessoesAtivas.reduce((a, s) => a + s.acertos, 0);
-  const pG = Math.round((cerG / totG) * 100);
-  document.getElementById('painel-total').textContent = totG;
-  document.getElementById('painel-acertos').textContent = cerG;
-  const pEl = document.getElementById('painel-pct'); pEl.textContent = pG + '%'; pEl.style.color = bc(pG, 89);
-
-  const mats = agregarPorMateria(sessoesAtivas);
-  document.getElementById('painel-materias').textContent = Object.keys(mats).length;
-  const topicosUnicos = new Set(sessoesAtivas.filter(s => s.topico && !s.topico.includes('não selecionado')).map(s => s.materia + '::' + s.topico));
-  document.getElementById('painel-topicos').textContent = topicosUnicos.size;
-
-  const sorted = Object.entries(mats).sort((a, b) => Math.round(a[1].acertos / a[1].total * 100) - Math.round(b[1].acertos / b[1].total * 100));
-  let bh = '';
-  sorted.forEach(([mat, d]) => {
-    const pct = Math.round((d.acertos / d.total) * 100);
-    const meta = getMeta(_edital, mat);
-    const cor = bc(pct, meta);
-    bh += `<div class="mr2"><div class="mn">${mat}</div>
-      <div class="mb2"><div class="mf" style="width:${pct}%;background:${cor}"></div>
-        <div style="position:absolute;top:0;right:${100-meta}%;width:2px;height:100%;background:var(--r);opacity:.5"></div></div>
-      <span class="mp" style="color:${cor}">${pct}%</span><span class="mq">${d.total}q</span></div>`;
-  });
-  document.getElementById('painel-barras').innerHTML = bh;
-
-  const labels = sessoesAtivas.map((_, i) => String(i + 1));
-  const data = sessoesAtivas.map(s => s.pct);
-  const ctx = document.getElementById('evolChart');
-  if (!ctx) return;
-  if (!evolChart) {
-    evolChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [
-      { label: 'Aproveit.', data, borderColor: '#7F77DD', backgroundColor: 'rgba(127,119,221,0.07)', tension: .3, pointRadius: 3, pointBackgroundColor: '#7F77DD', fill: true },
-      { label: 'Meta', data: labels.map(() => 89), borderColor: '#E24B4A', borderDash: [5,3], pointRadius: 0, borderWidth: 1.5, fill: false }
-    ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-      scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } }, x: { ticks: { font: { size: 10 }, autoSkip: true }, grid: { display: false } } } } });
+    document.getElementById('painel-barras').innerHTML = '<div class="empty">Registre sessões de questões para ver o desempenho por matéria.</div>';
   } else {
-    evolChart.data.labels = labels; evolChart.data.datasets[0].data = data; evolChart.update();
+    const totG = sessoesQuest.reduce((a, s) => a + s.total, 0);
+    const cerG = sessoesQuest.reduce((a, s) => a + s.acertos, 0);
+    const pG = Math.round((cerG / totG) * 100);
+    document.getElementById('painel-total').textContent = totG;
+    document.getElementById('painel-acertos').textContent = cerG;
+    const pEl = document.getElementById('painel-pct'); pEl.textContent = pG + '%'; pEl.style.color = bc(pG, 89);
+
+    const mats = agregarPorMateria(sessoesQuest);
+    document.getElementById('painel-materias').textContent = Object.keys(mats).length;
+    const topicosUnicos = new Set(sessoesQuest.filter(s => s.topico && !s.topico.includes('não selecionado')).map(s => s.materia + '::' + s.topico));
+    document.getElementById('painel-topicos').textContent = topicosUnicos.size;
+
+    const sorted = Object.entries(mats).sort((a, b) => Math.round(a[1].acertos / a[1].total * 100) - Math.round(b[1].acertos / b[1].total * 100));
+    let bh = '';
+    sorted.forEach(([mat, d]) => {
+      const pct = Math.round((d.acertos / d.total) * 100);
+      const meta = getMeta(_edital, mat);
+      const cor = bc(pct, meta);
+      bh += `<div class="mr2"><div class="mn">${mat}</div>
+        <div class="mb2"><div class="mf" style="width:${pct}%;background:${cor}"></div>
+          <div style="position:absolute;top:0;right:${100-meta}%;width:2px;height:100%;background:var(--r);opacity:.5"></div></div>
+        <span class="mp" style="color:${cor}">${pct}%</span><span class="mq">${d.total}q</span></div>`;
+    });
+    document.getElementById('painel-barras').innerHTML = bh;
+
+    const labels = sessoesQuest.map((_, i) => String(i + 1));
+    const data = sessoesQuest.map(s => s.pct);
+    const ctx = document.getElementById('evolChart');
+    if (ctx) {
+      if (!evolChart) {
+        evolChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [
+          { label: 'Aproveit.', data, borderColor: '#7F77DD', backgroundColor: 'rgba(127,119,221,0.07)', tension: .3, pointRadius: 3, pointBackgroundColor: '#7F77DD', fill: true },
+          { label: 'Meta', data: labels.map(() => 89), borderColor: '#E24B4A', borderDash: [5,3], pointRadius: 0, borderWidth: 1.5, fill: false }
+        ]}, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+          scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } }, x: { ticks: { font: { size: 10 }, autoSkip: true }, grid: { display: false } } } } });
+      } else {
+        evolChart.data.labels = labels; evolChart.data.datasets[0].data = data; evolChart.update();
+      }
+    }
+  }
+
+  // Bloco separado de horas de teoria/revisão
+  const teoriaBox = document.getElementById('painel-teoria-box');
+  if (teoriaBox) {
+    if (!sessoesTeo.length) {
+      teoriaBox.innerHTML = '<div class="empty">Nenhuma sessão de teoria/revisão registrada ainda.</div>';
+    } else {
+      const totalMin = totalMinutosTeoria(sessoesTeo);
+      const aggTeoria = agregarTeoriaPorMateria(sessoesTeo);
+      let th = `<div class="mg" style="margin-bottom:1rem">
+        <div class="mc"><div class="ml">Tempo total de teoria</div><div class="mv">${formatarDuracao(totalMin)}</div></div>
+        <div class="mc"><div class="ml">Sessões de teoria</div><div class="mv">${sessoesTeo.length}</div></div>
+      </div>`;
+      const sortedTeoria = Object.entries(aggTeoria).sort((a, b) => b[1].minutos - a[1].minutos);
+      sortedTeoria.forEach(([mat, d]) => {
+        th += `<div class="sr"><span style="font-size:13px">${mat}</span>
+          <span style="font-size:13px;font-weight:600">${formatarDuracao(d.minutos)} <span style="font-size:11px;color:var(--t3);font-weight:400">(${d.sessoes} sessões)</span></span></div>`;
+      });
+      teoriaBox.innerHTML = th;
+    }
   }
 }
 
@@ -202,23 +319,46 @@ export function renderPainelTab() {
 
 export function renderHistoricoTab() {
   const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
+  const sessoesQuest = sessoesQuestoes(sessoesAtivas);
+  const sessoesTeo = sessoesTeoria(sessoesAtivas);
+
   const tbody = document.getElementById('hist-corpo');
-  if (!sessoesAtivas.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Nenhuma sessão registrada.</div></td></tr>'; return; }
-  let html = '';
-  [...sessoesAtivas].reverse().forEach(s => {
-    const meta = getMeta(_edital, s.materia);
-    const ok = s.pct >= meta, warn = s.pct >= (meta - 10);
-    const badge = ok ? 'bok' : warn ? 'bwn' : 'bda';
-    const label = ok ? 'Na meta' : warn ? 'Atenção' : 'Abaixo';
-    const cor = bc(s.pct, meta);
-    html += `<tr><td title="${s.materia}">${s.materia}</td>
-      <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
-      <td>${s.data}</td><td>${s.total}</td><td>${s.acertos}</td>
-      <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
-      <td><span class="badge ${badge}">${label}</span></td>
-      <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
-  });
-  tbody.innerHTML = html;
+  if (!sessoesQuest.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Nenhuma sessão de questões registrada.</div></td></tr>';
+  } else {
+    let html = '';
+    [...sessoesQuest].reverse().forEach(s => {
+      const meta = getMeta(_edital, s.materia);
+      const ok = s.pct >= meta, warn = s.pct >= (meta - 10);
+      const badge = ok ? 'bok' : warn ? 'bwn' : 'bda';
+      const label = ok ? 'Na meta' : warn ? 'Atenção' : 'Abaixo';
+      const cor = bc(s.pct, meta);
+      html += `<tr><td title="${s.materia}">${s.materia}</td>
+        <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
+        <td>${s.data}</td><td>${s.total}</td><td>${s.acertos}</td>
+        <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
+        <td><span class="badge ${badge}">${label}</span></td>
+        <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+    });
+    tbody.innerHTML = html;
+  }
+
+  const tbodyTeoria = document.getElementById('hist-teoria-corpo');
+  if (tbodyTeoria) {
+    if (!sessoesTeo.length) {
+      tbodyTeoria.innerHTML = '<tr><td colspan="5"><div class="empty">Nenhuma sessão de teoria/revisão registrada.</div></td></tr>';
+    } else {
+      let htmlT = '';
+      [...sessoesTeo].reverse().forEach(s => {
+        htmlT += `<tr><td title="${s.materia}">${s.materia}</td>
+          <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
+          <td style="font-size:11px;color:var(--t2)">${s.tipoMaterial || 'Outro'}</td>
+          <td>${s.data}</td><td>${formatarDuracao(s.duracaoMin)}</td>
+          <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+      });
+      tbodyTeoria.innerHTML = htmlT;
+    }
+  }
 }
 
 // ─── Relatório Semanal ───
@@ -244,14 +384,35 @@ window.__relAtualizar = renderRelatorioConteudo;
 function renderRelatorioConteudo() {
   const sel = document.getElementById('rel-semana');
   const sessoesAtivas = filtrarSessoesAtivas(_sessoes, _edital);
-  const sf = filtrarPorSemana(sessoesAtivas, sel ? sel.value : 'all');
+  const sfTodas = filtrarPorSemana(sessoesAtivas, sel ? sel.value : 'all');
+  const sf = sessoesQuestoes(sfTodas);
+  const sfTeoria = sessoesTeoria(sfTodas);
   const rc = document.getElementById('rel-conteudo');
   const cd = document.getElementById('rel-cronograma');
   const rm = document.getElementById('rel-metricas');
+  const teoriaBox = document.getElementById('rel-teoria-box');
+
+  // Bloco de teoria/revisão do período, renderizado independente do restante
+  if (teoriaBox) {
+    if (!sfTeoria.length) {
+      teoriaBox.innerHTML = '<div class="empty">Nenhuma sessão de teoria/revisão neste período.</div>';
+    } else {
+      const totalMin = totalMinutosTeoria(sfTeoria);
+      const aggT = agregarTeoriaPorMateria(sfTeoria);
+      let th = `<div class="mg" style="margin-bottom:.8rem">
+        <div class="mc"><div class="ml">Tempo de teoria no período</div><div class="mv">${formatarDuracao(totalMin)}</div></div>
+        <div class="mc"><div class="ml">Sessões de teoria</div><div class="mv">${sfTeoria.length}</div></div>
+      </div>`;
+      Object.entries(aggT).sort((a,b) => b[1].minutos - a[1].minutos).forEach(([mat, d]) => {
+        th += `<div class="sr"><span style="font-size:13px">${mat}</span><span style="font-size:13px;font-weight:600">${formatarDuracao(d.minutos)}</span></div>`;
+      });
+      teoriaBox.innerHTML = th;
+    }
+  }
 
   if (!sf.length) {
     rm.innerHTML = '';
-    rc.innerHTML = '<div class="empty">Sem dados para o período selecionado.</div>';
+    rc.innerHTML = '<div class="empty">Sem dados de questões para o período selecionado.</div>';
     cd.innerHTML = '<div class="empty">Sem dados suficientes.</div>';
     if (swChart) { swChart.destroy(); swChart = null; }
     return;

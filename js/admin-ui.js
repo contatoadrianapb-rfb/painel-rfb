@@ -5,7 +5,8 @@ import {
   adicionarMateria, removerMateria, editarMateria,
   adicionarTopico, editarTopico, removerTopico,
   marcarRevisado, marcarDesatualizado,
-  inativarMateria, reativarMateria, listaTodasMaterias
+  inativarMateria, reativarMateria, listaTodasMaterias,
+  getPeso, editarPeso
 } from './edital.js';
 
 let _edital = null;
@@ -78,6 +79,7 @@ function renderListaMaterias() {
         <div class="admin-materia-title">
           <span class="chevron ${isOpen ? 'open' : ''}" id="chev-${slug(nome)}">▶</span>
           ${nome} ${dados.dificil ? '<span style="color:var(--p);font-size:11px">⚠ difícil</span>' : ''}
+          ${getPeso(_edital, nome) >= 2 ? `<span class="badge bwn" style="margin-left:2px">Peso ${getPeso(_edital, nome)}</span>` : ''}
           ${!ativa ? '<span class="badge bwn" style="margin-left:4px">Inativa</span>' : ''}
           <span style="color:var(--t3);font-weight:400;font-size:11px">(${dados.topicos.length} tópicos)</span>
         </div>
@@ -86,6 +88,7 @@ function renderListaMaterias() {
             ? `<button class="btn btn-sm" onclick="window.__adminInativar('${escapeAttr(nome)}')">Inativar</button>`
             : `<button class="btn btn-sm btn-p" onclick="window.__adminReativar('${escapeAttr(nome)}')">Reativar</button>`
           }
+          <button class="btn btn-sm" onclick="window.__adminEditarPeso('${escapeAttr(nome)}')">Peso</button>
           <button class="btn btn-sm" onclick="window.__adminEditarMateria('${escapeAttr(nome)}')">Editar</button>
           <button class="btn btn-sm btn-danger" onclick="window.__adminRemoverMateria('${escapeAttr(nome)}')">Excluir</button>
         </div>
@@ -116,6 +119,20 @@ window.__adminInativar = async function(nome) {
   renderListaMaterias();
 };
 
+window.__adminEditarPeso = async function(nome) {
+  const atual = getPeso(_edital, nome);
+  const resp = prompt(
+    `Peso editalício de "${nome}" (atual: ${atual}):\n\n1 = demais matérias\n2 = maior valor na prova (mais questões ou muito difícil)\n3 = também cai na prova discursiva\n\nDigite 1, 2 ou 3:`,
+    String(atual)
+  );
+  if (!resp) return;
+  const novo = parseInt(resp);
+  if (![1, 2, 3].includes(novo)) { alert('Digite apenas 1, 2 ou 3.'); return; }
+  await editarPeso(_edital, nome, novo);
+  await notificarMudanca();
+  renderListaMaterias();
+};
+
 window.__adminReativar = async function(nome) {
   await reativarMateria(_edital, nome);
   await notificarMudanca();
@@ -137,12 +154,14 @@ window.__adminToggle = function(nome) {
 window.__adminAdicionarMateria = async function() {
   const input = document.getElementById('admin-nova-materia');
   const dificilCheckbox = document.getElementById('admin-nova-dificil');
+  const pesoSelect = document.getElementById('admin-novo-peso');
   const nome = input.value.trim();
   if (!nome) { alert('Digite o nome da matéria.'); return; }
   if (_edital.materias[nome]) { alert('Essa matéria já existe.'); return; }
-  await adicionarMateria(_edital, nome, dificilCheckbox.checked);
+  await adicionarMateria(_edital, nome, dificilCheckbox.checked, parseInt(pesoSelect.value) || 1);
   input.value = '';
   dificilCheckbox.checked = false;
+  pesoSelect.value = '1';
   await notificarMudanca();
   renderListaMaterias();
 };
