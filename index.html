@@ -74,7 +74,7 @@
           <select id="reg-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
           <input type="number" id="reg-total" placeholder="Total q." min="1">
           <input type="number" id="reg-acertos" placeholder="Acertos" min="0">
-          <input type="text" id="reg-data" placeholder="dd/mm/aa">
+          <input type="date" id="reg-data" title="Data (em branco = hoje)">
           <button class="btn btn-p" onclick="window.__regAdicionar()">+ Adicionar</button>
         </div>
         <p class="hint">Os tópicos vêm da Administração do Edital. Data preenchida automaticamente se deixada em branco.</p>
@@ -89,7 +89,7 @@
           <select id="regt-tipo-material"><option value="">Tipo de material...</option></select>
           <input type="number" id="regt-horas" placeholder="Horas" min="0">
           <input type="number" id="regt-minutos" placeholder="Min" min="0" max="59">
-          <input type="text" id="regt-data" placeholder="dd/mm/aa">
+          <input type="date" id="regt-data" title="Data (em branco = hoje)">
           <button class="btn btn-p" onclick="window.__regtAdicionar()">+ Adicionar</button>
         </div>
         <p class="hint">Use para videoaulas, leitura de lei seca, resumos ou qualquer estudo sem resolução de questões. Não gera percentual de aproveitamento, mas conta no seu tempo total dedicado à matéria.</p>
@@ -142,6 +142,11 @@
       <div class="field">
         <label>Link da questão no Tec Concursos (opcional)</label>
         <input type="text" id="fc-link" placeholder="https://www.tecconcursos.com.br/...">
+      </div>
+      <div class="field">
+        <label>Imagem / Print / Esquema (opcional — máx. 800KB)</label>
+        <input type="file" id="fc-imagem" accept="image/*" onchange="window.__fcPreviewImagem()" style="font-size:13px">
+        <div id="fc-img-preview"></div>
       </div>
       <button class="btn btn-p" onclick="window.__fcCriar()">Criar flashcard</button>
     </div>
@@ -203,12 +208,11 @@
 
     <div class="card">
       <div class="ct">Registrar dado do Tec Concursos</div>
-      <p class="hint">Extraia no Tec Concursos o percentual de cobrança e a quantidade de questões de um tópico, filtrando pela banca e período desejados, e registre aqui.</p>
-      <div class="fr" style="grid-template-columns:1.6fr 1.6fr 1fr .8fr .8fr auto">
+      <p class="hint">Extraia no Tec Concursos a quantidade de questões já cobradas de um tópico, filtrando pela banca e período desejados. O percentual de cobrança é calculado automaticamente pelo sistema.</p>
+      <div class="fr" style="grid-template-columns:1.8fr 1.8fr 1.2fr 1fr auto">
         <select id="freq-materia" onchange="window.__freqPopularTopicos()"><option value="">Matéria...</option></select>
         <select id="freq-topico" disabled><option value="">Selecione a matéria primeiro...</option></select>
         <select id="freq-banca"><option value="">Banca...</option></select>
-        <input type="number" id="freq-pct" placeholder="% cobr." min="0" max="100" step="0.1">
         <input type="number" id="freq-questoes" placeholder="Quest." min="0">
         <button class="btn btn-p" onclick="window.__freqRegistrar()">+ Registrar</button>
       </div>
@@ -253,11 +257,11 @@
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
-            <th style="width:17%">Matéria</th><th style="width:27%">Tópico</th>
-            <th style="width:9%">Data</th><th style="width:6%">Total</th><th style="width:6%">Acertos</th>
-            <th style="width:21%">Aproveit.</th><th style="width:8%">Status</th><th style="width:6%"></th>
+            <th style="width:15%">Matéria</th><th style="width:23%">Tópico</th>
+            <th style="width:8%">Data</th><th style="width:5%">Total</th><th style="width:5%">Acertos</th>
+            <th style="width:18%">Aproveit.</th><th style="width:8%">Meta</th><th style="width:8%">Status</th><th style="width:6%"></th>
           </tr></thead>
-          <tbody id="hist-corpo"><tr><td colspan="8"><div class="empty">Nenhuma sessão registrada.</div></td></tr></tbody>
+          <tbody id="hist-corpo"><tr><td colspan="9"><div class="empty">Nenhuma sessão registrada.</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -333,6 +337,32 @@
     </div>
   </div>
 </main>
+
+<!-- Modal de edição de sessão (questões ou teoria) -->
+<div id="edit-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center">
+  <div class="card" style="max-width:480px;width:90%;margin:0;max-height:85vh;overflow-y:auto">
+    <div class="ct" id="edit-modal-titulo">Editar sessão</div>
+    <div id="edit-modal-corpo-questoes" style="display:none">
+      <div class="field"><label>Matéria</label><select id="edit-materia" onchange="window.__editPopularTopicos()"></select></div>
+      <div class="field"><label>Tópico</label><select id="edit-topico"></select></div>
+      <div class="field"><label>Total de questões</label><input type="number" id="edit-total" min="1"></div>
+      <div class="field"><label>Acertos</label><input type="number" id="edit-acertos" min="0"></div>
+      <div class="field"><label>Data</label><input type="date" id="edit-data"></div>
+    </div>
+    <div id="edit-modal-corpo-teoria" style="display:none">
+      <div class="field"><label>Matéria</label><select id="editt-materia" onchange="window.__edittPopularTopicos()"></select></div>
+      <div class="field"><label>Tópico</label><select id="editt-topico"></select></div>
+      <div class="field"><label>Tipo de material</label><select id="editt-tipo-material"></select></div>
+      <div class="field"><label>Horas</label><input type="number" id="editt-horas" min="0"></div>
+      <div class="field"><label>Minutos</label><input type="number" id="editt-minutos" min="0" max="59"></div>
+      <div class="field"><label>Data</label><input type="date" id="editt-data"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button class="btn" onclick="window.__editFechar()">Cancelar</button>
+      <button class="btn btn-p" id="edit-modal-salvar">Salvar</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="js/app.js"></script>
 </body>
