@@ -1,13 +1,16 @@
 // ─────────────────────────────────────────────────────────────
 // Módulo de Frequência de Cobrança — dados extraídos do Tec Concursos
-// por tópico, banca examinadora, percentual e quantidade de questões
+// por tópico e banca examinadora. A usuária informa apenas a quantidade
+// de questões já cobradas; o percentual de cobrança de cada tópico é
+// calculado automaticamente pelo sistema, em relação ao total de
+// questões já registradas para aquela matéria (dentro da mesma banca).
 // ─────────────────────────────────────────────────────────────
 import { getDocument, setDocument } from './firebase-config.js';
 
 export const BANCAS = ['Cebraspe', 'FGV', 'FCC', 'Cesgranrio', 'IBFC', 'IDECAN', 'Outra'];
 
 const FREQUENCIA_INICIAL = {
-  // Estrutura: { "Matéria::Tópico": { "Cebraspe": { pct: 12, questoes: 23 }, "FGV": { pct: 18, questoes: 31 } } }
+  // Estrutura: { "Matéria::Tópico": { "Cebraspe": { questoes: 23 }, "FGV": { questoes: 31 } } }
   dados: {},
   // Bancas atualmente selecionadas como referência para os cálculos (vazio = considera todas as cadastradas)
   bancasAtivas: []
@@ -40,10 +43,24 @@ function chave(materia, topico) {
   return `${materia}::${topico}`;
 }
 
-export async function registrarFrequenciaTopico(frequencia, materia, topico, banca, pct, questoes) {
+// Registra (ou substitui) a quantidade de questões de um tópico, numa banca.
+// Use para criar um registro novo, ou para corrigir/atualizar um existente
+// (por exemplo, somando questões de uma prova nova: passe o novo total
+// acumulado, não apenas o incremento).
+export async function registrarFrequenciaTopico(frequencia, materia, topico, banca, questoes) {
   const k = chave(materia, topico);
   if (!frequencia.dados[k]) frequencia.dados[k] = {};
-  frequencia.dados[k][banca] = { pct: Number(pct) || 0, questoes: Number(questoes) || 0 };
+  frequencia.dados[k][banca] = { questoes: Number(questoes) || 0 };
+  return salvarFrequencia(frequencia);
+}
+
+// Soma questões a um registro já existente (usado ao "acrescentar" uma
+// prova nova ao total já cadastrado, sem precisar saber o total anterior).
+export async function adicionarQuestoesFrequencia(frequencia, materia, topico, banca, questoesNovas) {
+  const k = chave(materia, topico);
+  if (!frequencia.dados[k]) frequencia.dados[k] = {};
+  const atual = frequencia.dados[k][banca] ? frequencia.dados[k][banca].questoes : 0;
+  frequencia.dados[k][banca] = { questoes: atual + (Number(questoesNovas) || 0) };
   return salvarFrequencia(frequencia);
 }
 
@@ -63,34 +80,55 @@ export function getBancasCadastradas(frequencia, materia, topico) {
   return frequencia.dados[k] ? Object.keys(frequencia.dados[k]) : [];
 }
 
-// Combina os dados das bancas selecionadas (ou todas as cadastradas, se
-// nenhuma estiver selecionada) em um único valor de percentual por tópico,
-// usando média simples entre as bancas consideradas.
-export function percentualCombinado(frequencia, materia, topico) {
+export function getQuestoesTopicoBanca(frequencia, materia, topico, banca) {
+  const k = chave(materia, topico);
+  return (frequencia.dados[k] && frequencia.dados[k][banca]) ? frequencia.dados[k][banca].questoes : 0;
+}
+
+function bancasConsideradas(frequencia, registrosTopico) {
+  return (frequencia.bancasAtivas && frequencia.bancasAtivas.length)
+    ? frequencia.bancasAtivas
+    : Object.keys(registrosTopico || {});
+}
+
+// Soma de questões de UM tópico, somando as bancas consideradas.
+function questoesTopico(frequencia, materia, topico) {
+  const k = chave(materia, topico);
+  const reg = frequencia.dados[k];
+  if (!reg) return 0;
+  const bancas = bancasConsideradas(frequencia, reg);
+  return bancas.reduce((a, b) => a + (reg[b] ? reg[b].questoes : 0), 0);
+}
+
+// Soma de questões de TODOS os tópicos cadastrados de uma matéria,
+// somando as bancas consideradas — usada como base do cálculo de percentual.
+function questoesTotalMateria(frequencia, materia, topicos) {
+  return topicos.reduce((a, t) => a + questoesTopico(frequencia, materia, t), 0);
+}
+
+// Percentual de cobrança do tópico, calculado automaticamente como
+// (questões do tópico) / (questões de todos os tópicos da matéria) × 100.
+// Precisa da lista completa de tópicos da matéria para ter a base de cálculo.
+export function percentualCombinado(frequencia, materia, topico, todosTopicosMateria) {
   const k = chave(materia, topico);
   const registrosTopico = frequencia.dados[k];
-  if (!registrosTopico) return null;
+  if (!registrosTopico || !Object.keys(registrosTopico).length) return null;
 
-  const bancasConsideradas = (frequencia.bancasAtivas && frequencia.bancasAtivas.length)
-    ? frequencia.bancasAtivas
-    : Object.keys(registrosTopico);
+  const questoes = questoesTopico(frequencia, materia, topico);
+  if (questoes <= 0) return null;
 
-  const valores = bancasConsideradas
-    .map(b => registrosTopico[b])
-    .filter(Boolean);
-
-  if (!valores.length) return null;
-
-  const somaPct = valores.reduce((a, v) => a + v.pct, 0);
-  const somaQuestoes = valores.reduce((a, v) => a + v.questoes, 0);
-  return { pct: Math.round((somaPct / valores.length) * 10) / 10, questoes: somaQuestoes };
+  const totalMateria = questoesTotalMateria(frequencia, materia, todosTopicosMateria || [topico]);
+  const pct = totalMateria > 0 ? Math.round((questoes / totalMateria) * 1000) / 10 : 0;
+  return { pct, questoes };
 }
 
 // Gera o ranking de tópicos de uma matéria, ordenado por percentual de
 // cobrança combinado (decrescente), com a posição e a régua de estrelas.
+// O percentual de cada tópico é calculado em relação ao total de questões
+// já cadastradas para a matéria inteira (passada em "topicos").
 export function rankingTopicosMateria(frequencia, materia, topicos) {
   const comDados = topicos.map(topico => {
-    const combinado = percentualCombinado(frequencia, materia, topico);
+    const combinado = percentualCombinado(frequencia, materia, topico, topicos);
     return { topico, pct: combinado ? combinado.pct : null, questoes: combinado ? combinado.questoes : null, temDados: !!combinado };
   });
 
@@ -130,8 +168,8 @@ export function renderEstrelas(n) {
 // Pontuação de prioridade derivada da frequência, usada como fator extra
 // no cálculo de cronograma (ver cronograma.js). Tópicos sem dados
 // cadastrados recebem pontuação neutra (3, equivalente a 3 estrelas).
-export function pontuacaoFrequenciaTopico(frequencia, materia, topico) {
-  const combinado = percentualCombinado(frequencia, materia, topico);
+export function pontuacaoFrequenciaTopico(frequencia, materia, topico, todosTopicosMateria) {
+  const combinado = percentualCombinado(frequencia, materia, topico, todosTopicosMateria);
   if (!combinado) return 3;
   // Aproximação direta: cada 5 pontos percentuais de cobrança ~ 1 ponto de prioridade,
   // limitado a um máximo de 5 para não distorcer demais a fórmula combinada do cronograma.
@@ -142,6 +180,6 @@ export function pontuacaoFrequenciaTopico(frequencia, materia, topico) {
 // pontuações de seus tópicos), usada como fator adicional no cronograma.
 export function pontuacaoFrequenciaMateria(frequencia, materia, topicos) {
   if (!topicos.length) return 3;
-  const soma = topicos.reduce((a, t) => a + pontuacaoFrequenciaTopico(frequencia, materia, t), 0);
+  const soma = topicos.reduce((a, t) => a + pontuacaoFrequenciaTopico(frequencia, materia, t, topicos), 0);
   return soma / topicos.length;
 }

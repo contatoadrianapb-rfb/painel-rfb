@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 // Módulo de Sessões — registro de questões, histórico, agregações
 // ─────────────────────────────────────────────────────────────
-import { getAllDocs, addDocument, deleteDocument } from './firebase-config.js';
+import { getAllDocs, addDocument, deleteDocument, updateDocument } from './firebase-config.js';
 import { getMeta, materiaEstaAtiva } from './edital.js';
 
 function hojeBR() {
@@ -60,6 +60,27 @@ export async function registrarSessaoTeoria({ materia, topico, tipoMaterial, hor
 
 export async function excluirSessao(id) {
   return deleteDocument('sessoes', id);
+}
+
+// Edita uma sessão de questões já registrada (matéria, tópico, total,
+// acertos, data), recalculando o percentual e a semana automaticamente.
+export async function editarSessaoQuestoes(id, { materia, topico, total, acertos, data }) {
+  const pct = Math.round((acertos / total) * 100);
+  const dados = {
+    materia, topico, total, acertos, pct,
+    data, semana: semanaISO(data)
+  };
+  return updateDocument('sessoes', id, dados);
+}
+
+// Edita uma sessão de teoria/revisão já registrada.
+export async function editarSessaoTeoria(id, { materia, topico, tipoMaterial, horas, minutos, data }) {
+  const duracaoMin = (Number(horas) || 0) * 60 + (Number(minutos) || 0);
+  const dados = {
+    materia, topico, tipoMaterial: tipoMaterial || 'Outro', duracaoMin,
+    data, semana: semanaISO(data)
+  };
+  return updateDocument('sessoes', id, dados);
 }
 
 // Sessões antigas não têm o campo "tipo" — tratamos a ausência como 'questoes'

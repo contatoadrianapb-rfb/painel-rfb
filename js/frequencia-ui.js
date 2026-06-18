@@ -1,9 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // UI — Frequência de Cobrança por tópico/banca (dados do Tec Concursos)
+// O percentual de cobrança é calculado automaticamente pelo sistema a
+// partir da quantidade de questões informada pela usuária.
 // ─────────────────────────────────────────────────────────────
 import {
   carregarFrequencia, salvarFrequencia, registrarFrequenciaTopico,
-  removerFrequenciaTopicoBanca, definirBancasAtivas, getBancasCadastradas,
+  adicionarQuestoesFrequencia, removerFrequenciaTopicoBanca,
+  getBancasCadastradas, getQuestoesTopicoBanca,
   rankingTopicosMateria, renderEstrelas, BANCAS
 } from './frequencia.js';
 import { listaMaterias, listaTopicos } from './edital.js';
@@ -94,21 +97,23 @@ window.__freqPopularTopicos = function() {
   renderRankingMateria();
 };
 
+// Registra a quantidade de questões informada como o TOTAL daquele
+// tópico/banca (substitui o que já havia, se existir). Use o botão
+// "+ questões" no ranking para SOMAR a um total já existente, sem
+// precisar saber ou recalcular o valor anterior.
 window.__freqRegistrar = async function() {
   const materia = document.getElementById('freq-materia').value;
   const topico = document.getElementById('freq-topico').value;
   const banca = document.getElementById('freq-banca').value;
-  const pct = document.getElementById('freq-pct').value;
   const questoes = document.getElementById('freq-questoes').value;
 
   if (!materia || !topico || !banca) { flashMsg('Selecione matéria, tópico e banca.'); return; }
-  if (pct === '' || isNaN(parseFloat(pct))) { flashMsg('Informe o percentual de cobrança.'); return; }
+  if (questoes === '' || isNaN(parseInt(questoes)) || parseInt(questoes) < 0) { flashMsg('Informe a quantidade de questões.'); return; }
 
-  await registrarFrequenciaTopico(_frequencia, materia, topico, banca, pct, questoes || 0);
+  await registrarFrequenciaTopico(_frequencia, materia, topico, banca, questoes);
 
-  document.getElementById('freq-pct').value = '';
   document.getElementById('freq-questoes').value = '';
-  flashMsg(`Registrado: ${banca} — ${pct}% de cobrança em "${topico}".`, true);
+  flashMsg(`Registrado: ${banca} — ${questoes} questões em "${topico}". O percentual de cobrança foi recalculado automaticamente.`, true);
   renderRankingMateria();
 };
 
@@ -135,21 +140,24 @@ function renderRankingMateria() {
   }
   const ranking = rankingTopicosMateria(_frequencia, mat, topicos);
 
-  let html = '<div class="rt">Ranking de cobrança — ' + mat + '</div>';
+  let html = '<div class="rt">Ranking de cobrança — ' + mat + ' <span style="font-weight:400;color:var(--t3)">(percentual calculado automaticamente pelo total de questões da matéria)</span></div>';
   ranking.forEach(r => {
     const bancasCadastradas = getBancasCadastradas(_frequencia, mat, r.topico);
     html += `<div class="sr" style="align-items:flex-start">
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500">${r.posicao ? r.posicao + 'º — ' : ''}${r.topico}</div>
-        ${bancasCadastradas.length ? `<div style="margin-top:3px">${bancasCadastradas.map(b => {
-          const v = _frequencia.dados[mat + '::' + r.topico][b];
-          return `<span class="ttag" style="background:var(--pl);color:var(--pd)">${b}: ${v.pct}% (${v.questoes}q)
-            <span style="cursor:pointer;margin-left:4px" onclick="window.__freqRemoverBanca('${escapeAttr(mat)}','${escapeAttr(r.topico)}','${b}')">×</span></span>`;
+        ${bancasCadastradas.length ? `<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:4px">${bancasCadastradas.map(b => {
+          const q = getQuestoesTopicoBanca(_frequencia, mat, r.topico, b);
+          return `<span class="ttag" style="background:var(--pl);color:var(--pd);display:inline-flex;align-items:center;gap:5px">
+            ${b}: ${q}q
+            <span style="cursor:pointer" title="Adicionar mais questões" onclick="window.__freqAdicionarQuestoes('${escapeAttr(mat)}','${escapeAttr(r.topico)}','${b}')">✏️</span>
+            <span style="cursor:pointer" title="Remover" onclick="window.__freqRemoverBanca('${escapeAttr(mat)}','${escapeAttr(r.topico)}','${b}')">×</span>
+          </span>`;
         }).join('')}</div>` : '<div style="font-size:11px;color:var(--t3);margin-top:3px">Sem dados cadastrados ainda</div>'}
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:12px">
         ${r.estrelas ? `<div style="font-size:14px;color:#BA7517">${renderEstrelas(r.estrelas)}</div>` : ''}
-        ${r.pct !== null ? `<div style="font-size:11px;color:var(--t3)">${r.pct}% combinado</div>` : ''}
+        ${r.pct !== null ? `<div style="font-size:11px;color:var(--t3)">${r.pct}% de cobrança (${r.questoes}q)</div>` : ''}
       </div>
     </div>`;
   });
@@ -161,5 +169,20 @@ function escapeAttr(s) { return s.replace(/'/g, "\\'"); }
 window.__freqRemoverBanca = async function(materia, topico, banca) {
   if (!confirm(`Remover o dado de "${banca}" para este tópico?`)) return;
   await removerFrequenciaTopicoBanca(_frequencia, materia, topico, banca);
+  renderRankingMateria();
+};
+
+// Permite somar questões de uma nova prova ao total já cadastrado,
+// ou corrigir o valor diretamente (digitando o total certo).
+window.__freqAdicionarQuestoes = async function(materia, topico, banca) {
+  const atual = getQuestoesTopicoBanca(_frequencia, materia, topico, banca);
+  const resp = prompt(
+    `"${topico}" — ${banca}\nTotal de questões já cadastrado: ${atual}\n\nDigite quantas questões NOVAS somar (ex: uma prova nova trouxe 3 questões deste tópico, digite 3):`,
+    '0'
+  );
+  if (resp === null) return;
+  const novas = parseInt(resp);
+  if (isNaN(novas) || novas < 0) { alert('Digite um número válido.'); return; }
+  await adicionarQuestoesFrequencia(_frequencia, materia, topico, banca, novas);
   renderRankingMateria();
 };

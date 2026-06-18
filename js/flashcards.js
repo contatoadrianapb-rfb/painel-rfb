@@ -25,20 +25,26 @@ export async function listarFlashcards() {
   return getAllDocs('flashcards');
 }
 
-export async function criarFlashcard({ materia, topico, pergunta, resposta, explicacao, link }) {
+export async function criarFlashcard({ materia, topico, pergunta, resposta, explicacao, link, imagemBase64 }) {
   const hoje = hojeISO();
   const card = {
     materia, topico, pergunta, resposta,
     explicacao: explicacao || '',
     link: link || '',
+    imagemBase64: imagemBase64 || '',
     intervalo: 1,
     repeticoes: 0,
-    proximaRevisao: hoje, // novo cartão já entra disponível para revisão hoje
+    proximaRevisao: hoje,
     status: 'novo',
     criadoEm: hoje,
     ultimaRevisao: null
   };
   return addDocument('flashcards', card);
+}
+
+export async function atualizarFlashcard(id, campos) {
+  await updateDocument('flashcards', id, campos);
+  return { id, ...campos };
 }
 
 export async function excluirFlashcard(id) {

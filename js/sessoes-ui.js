@@ -4,7 +4,8 @@
 import { registrarSessao, excluirSessao, sessoesHoje, agregarPorMateria,
   getSemanasDisponiveis, filtrarPorSemana, agregarPorTopico, hojeBR, filtrarSessoesAtivas,
   registrarSessaoTeoria, sessoesQuestoes, sessoesTeoria, agregarTeoriaPorMateria,
-  formatarDuracao, totalMinutosTeoria, TIPOS_MATERIAL } from './sessoes.js';
+  formatarDuracao, totalMinutosTeoria, TIPOS_MATERIAL, editarSessaoQuestoes, editarSessaoTeoria,
+  listarSessoes } from './sessoes.js';
 import { getMeta, listaMaterias, listaTopicos, contarMateriasInativas } from './edital.js';
 
 let _edital = null;
@@ -24,6 +25,15 @@ export function atualizarContextoSessoes(edital, sessoes) {
 }
 
 function bc(p, m) { return p >= m ? '#639922' : p >= (m - 10) ? '#BA7517' : '#E24B4A'; }
+
+// Converte o valor de um <input type="date"> (yyyy-mm-dd) para o formato
+// interno dd/mm/aa. Campo vazio retorna undefined (sistema usa o dia de hoje).
+function dataInputParaBR(valorInput) {
+  if (!valorInput) return undefined;
+  const p = valorInput.split('-');
+  if (p.length < 3) return undefined;
+  return `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+}
 
 // ─── Registrar Sessão ───
 
@@ -89,7 +99,7 @@ window.__regtAdicionar = async function() {
   const tipoMaterial = document.getElementById('regt-tipo-material').value || 'Outro';
   const horas = parseFloat(document.getElementById('regt-horas').value) || 0;
   const minutos = parseFloat(document.getElementById('regt-minutos').value) || 0;
-  const data = document.getElementById('regt-data').value.trim() || undefined;
+  const data = dataInputParaBR(document.getElementById('regt-data').value);
 
   if (horas <= 0 && minutos <= 0) { regFlash('alert', 'Informe o tempo dedicado (horas e/ou minutos).'); return; }
 
@@ -132,7 +142,7 @@ window.__regAdicionar = async function() {
   const topico = document.getElementById('reg-topico').value || '(tópico não selecionado)';
   const total = parseInt(document.getElementById('reg-total').value);
   const acertos = parseInt(document.getElementById('reg-acertos').value);
-  const data = document.getElementById('reg-data').value.trim() || undefined;
+  const data = dataInputParaBR(document.getElementById('reg-data').value);
 
   if (!total || total < 1) { regFlash('alert', 'Informe o total de questões.'); return; }
   if (isNaN(acertos) || acertos < 0) { regFlash('alert', 'Informe o número de acertos.'); return; }
@@ -193,7 +203,7 @@ function renderSessoesHoje() {
   let tT = 0, tC = 0;
 
   if (ts.length) {
-    html += '<div class="rt">Questões</div><div style="overflow-x:auto"><table><thead><tr><th style="width:22%">Matéria</th><th style="width:32%">Tópico</th><th style="width:7%">Total</th><th style="width:7%">Acertos</th><th style="width:26%">Aproveit.</th><th></th></tr></thead><tbody>';
+    html += '<div class="rt">Questões</div><div style="overflow-x:auto"><table><thead><tr><th style="width:20%">Matéria</th><th style="width:28%">Tópico</th><th style="width:6%">Total</th><th style="width:6%">Acertos</th><th style="width:20%">Aproveit.</th><th style="width:9%">Meta</th><th></th></tr></thead><tbody>';
     ts.forEach(s => {
       tT += s.total; tC += s.acertos;
       const meta = getMeta(_edital, s.materia);
@@ -202,7 +212,8 @@ function renderSessoesHoje() {
         <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
         <td>${s.total}</td><td>${s.acertos}</td>
         <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
-        <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+        <td style="color:var(--t3);font-size:11px">${meta}%</td>
+        <td><button class="del-btn" onclick="window.__regEditar('${s.id}')" aria-label="Editar" title="Editar" style="margin-right:4px">✏️</button><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
     });
     html += '</tbody></table></div>';
   }
@@ -324,21 +335,24 @@ export function renderHistoricoTab() {
 
   const tbody = document.getElementById('hist-corpo');
   if (!sessoesQuest.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Nenhuma sessão de questões registrada.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty">Nenhuma sessão de questões registrada.</div></td></tr>';
   } else {
     let html = '';
     [...sessoesQuest].reverse().forEach(s => {
       const meta = getMeta(_edital, s.materia);
-      const ok = s.pct >= meta, warn = s.pct >= (meta - 10);
+      const gap = meta - s.pct;
+      const ok = s.pct >= meta;
+      const warn = !ok && gap <= 10;
       const badge = ok ? 'bok' : warn ? 'bwn' : 'bda';
-      const label = ok ? 'Na meta' : warn ? 'Atenção' : 'Abaixo';
+      const label = ok ? `✓ +${s.pct - meta}pts` : warn ? `−${gap}pts` : `−${gap}pts`;
       const cor = bc(s.pct, meta);
       html += `<tr><td title="${s.materia}">${s.materia}</td>
         <td title="${s.topico}" style="color:var(--t2);font-size:11px;white-space:normal;line-height:1.3">${s.topico}</td>
         <td>${s.data}</td><td>${s.total}</td><td>${s.acertos}</td>
         <td><div class="bw"><div class="bb"><div class="bf" style="width:${s.pct}%;background:${cor}"></div></div><span class="bp" style="color:${cor}">${s.pct}%</span></div></td>
+        <td style="color:var(--t3);font-size:11px">meta ${meta}%</td>
         <td><span class="badge ${badge}">${label}</span></td>
-        <td><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
+        <td><button class="del-btn" onclick="window.__regEditar('${s.id}')" aria-label="Editar" title="Editar" style="margin-right:4px">✏️</button><button class="del-btn" onclick="window.__regExcluir('${s.id}')" aria-label="Remover">×</button></td></tr>`;
     });
     tbody.innerHTML = html;
   }
@@ -503,3 +517,147 @@ function renderRelatorioConteudo() {
   if (allFracos.length > 6) ch += `<div style="font-size:12px;color:var(--t3);margin-top:8px">+${allFracos.length - 6} tópicos adicionais aguardando a próxima rodada de revisão.</div>`;
   cd.innerHTML = ch;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Modal de edição de sessão (questões ou teoria)
+// ─────────────────────────────────────────────────────────────
+
+// Converte dd/mm/aa (formato interno) para yyyy-mm-dd (formato do <input type="date">)
+function dataBRparaISO(dataBR) {
+  const p = dataBR.split('/');
+  if (p.length < 3) return '';
+  const ano = p[2].length === 2 ? '20' + p[2] : p[2];
+  return `${ano}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+}
+
+// Converte yyyy-mm-dd (formato do <input type="date">) para dd/mm/aa (formato interno)
+function dataISOparaBR(dataISO) {
+  const p = dataISO.split('-');
+  if (p.length < 3) return hojeBR();
+  return `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+}
+
+let _sessaoEditando = null;
+
+window.__regEditar = async function(id) {
+  const todas = await listarSessoes();
+  const sessao = todas.find(s => s.id === id);
+  if (!sessao) return;
+  _sessaoEditando = sessao;
+
+  const ehTeoria = sessao.tipo === 'teoria';
+  document.getElementById('edit-modal-titulo').textContent = ehTeoria ? 'Editar sessão de teoria/revisão' : 'Editar sessão de questões';
+  document.getElementById('edit-modal-corpo-questoes').style.display = ehTeoria ? 'none' : 'block';
+  document.getElementById('edit-modal-corpo-teoria').style.display = ehTeoria ? 'block' : 'none';
+
+  if (ehTeoria) {
+    const matSel = document.getElementById('editt-materia');
+    matSel.innerHTML = '';
+    listaMaterias(_edital).forEach(m => {
+      const o = document.createElement('option'); o.value = m; o.textContent = m;
+      if (m === sessao.materia) o.selected = true;
+      matSel.appendChild(o);
+    });
+    window.__edittPopularTopicos(sessao.topico);
+
+    const tipoSel = document.getElementById('editt-tipo-material');
+    tipoSel.innerHTML = '';
+    TIPOS_MATERIAL.forEach(t => {
+      const o = document.createElement('option'); o.value = t; o.textContent = t;
+      if (t === sessao.tipoMaterial) o.selected = true;
+      tipoSel.appendChild(o);
+    });
+
+    document.getElementById('editt-horas').value = Math.floor((sessao.duracaoMin || 0) / 60);
+    document.getElementById('editt-minutos').value = (sessao.duracaoMin || 0) % 60;
+    document.getElementById('editt-data').value = dataBRparaISO(sessao.data);
+  } else {
+    const matSel = document.getElementById('edit-materia');
+    matSel.innerHTML = '';
+    listaMaterias(_edital).forEach(m => {
+      const o = document.createElement('option'); o.value = m; o.textContent = m;
+      if (m === sessao.materia) o.selected = true;
+      matSel.appendChild(o);
+    });
+    window.__editPopularTopicos(sessao.topico);
+
+    document.getElementById('edit-total').value = sessao.total;
+    document.getElementById('edit-acertos').value = sessao.acertos;
+    document.getElementById('edit-data').value = dataBRparaISO(sessao.data);
+  }
+
+  document.getElementById('edit-modal-overlay').style.display = 'flex';
+};
+
+window.__editPopularTopicos = function(topicoSelecionado) {
+  const mat = document.getElementById('edit-materia').value;
+  const sel = document.getElementById('edit-topico');
+  sel.innerHTML = '';
+  const topicos = listaTopicos(_edital, mat);
+  topicos.forEach(t => {
+    const o = document.createElement('option'); o.value = t; o.textContent = t;
+    if (t === topicoSelecionado) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (topicoSelecionado && !topicos.includes(topicoSelecionado)) {
+    const o = document.createElement('option'); o.value = topicoSelecionado; o.textContent = topicoSelecionado; o.selected = true;
+    sel.appendChild(o);
+  }
+};
+
+window.__edittPopularTopicos = function(topicoSelecionado) {
+  const mat = document.getElementById('editt-materia').value;
+  const sel = document.getElementById('editt-topico');
+  sel.innerHTML = '';
+  const topicos = listaTopicos(_edital, mat);
+  topicos.forEach(t => {
+    const o = document.createElement('option'); o.value = t; o.textContent = t;
+    if (t === topicoSelecionado) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (topicoSelecionado && !topicos.includes(topicoSelecionado)) {
+    const o = document.createElement('option'); o.value = topicoSelecionado; o.textContent = topicoSelecionado; o.selected = true;
+    sel.appendChild(o);
+  }
+};
+
+window.__editFechar = function() {
+  document.getElementById('edit-modal-overlay').style.display = 'none';
+  _sessaoEditando = null;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnSalvar = document.getElementById('edit-modal-salvar');
+  if (btnSalvar) {
+    btnSalvar.addEventListener('click', async () => {
+      if (!_sessaoEditando) return;
+      const ehTeoria = _sessaoEditando.tipo === 'teoria';
+
+      if (ehTeoria) {
+        const materia = document.getElementById('editt-materia').value;
+        const topico = document.getElementById('editt-topico').value;
+        const tipoMaterial = document.getElementById('editt-tipo-material').value;
+        const horas = parseFloat(document.getElementById('editt-horas').value) || 0;
+        const minutos = parseFloat(document.getElementById('editt-minutos').value) || 0;
+        const dataISO = document.getElementById('editt-data').value;
+        if (horas <= 0 && minutos <= 0) { alert('Informe o tempo dedicado.'); return; }
+        if (!dataISO) { alert('Selecione a data.'); return; }
+        await editarSessaoTeoria(_sessaoEditando.id, { materia, topico, tipoMaterial, horas, minutos, data: dataISOparaBR(dataISO) });
+      } else {
+        const materia = document.getElementById('edit-materia').value;
+        const topico = document.getElementById('edit-topico').value;
+        const total = parseInt(document.getElementById('edit-total').value);
+        const acertos = parseInt(document.getElementById('edit-acertos').value);
+        const dataISO = document.getElementById('edit-data').value;
+        if (!total || total < 1) { alert('Informe o total de questões.'); return; }
+        if (isNaN(acertos) || acertos < 0) { alert('Informe os acertos.'); return; }
+        if (acertos > total) { alert('Acertos não podem ser maiores que o total.'); return; }
+        if (!dataISO) { alert('Selecione a data.'); return; }
+        await editarSessaoQuestoes(_sessaoEditando.id, { materia, topico, total, acertos, data: dataISOparaBR(dataISO) });
+      }
+
+      window.__editFechar();
+      if (_onChangeCallback) await _onChangeCallback();
+    });
+  }
+});

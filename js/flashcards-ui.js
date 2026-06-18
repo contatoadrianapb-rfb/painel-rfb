@@ -112,7 +112,19 @@ window.__fcCriar = async function() {
   if (!materia || !topico) { flashMsg('fc-alert', 'Selecione matéria e tópico.'); return; }
   if (!pergunta || !resposta) { flashMsg('fc-alert', 'Preencha ao menos a pergunta e a resposta.'); return; }
 
-  await criarFlashcard({ materia, topico, pergunta, resposta, explicacao, link });
+  // Processar imagem opcional
+  let imagemBase64 = '';
+  const fileInput = document.getElementById('fc-imagem');
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    const file = fileInput.files[0];
+    if (file.size > 800000) {
+      flashMsg('fc-alert', 'A imagem é muito grande. Use arquivos menores que 800KB (jpg ou png comprimido).');
+      return;
+    }
+    imagemBase64 = await lerArquivoComoBase64(file);
+  }
+
+  await criarFlashcard({ materia, topico, pergunta, resposta, explicacao, link, imagemBase64 });
 
   document.getElementById('fc-materia').value = '';
   document.getElementById('fc-topico').innerHTML = '<option value="">Selecione a matéria primeiro...</option>';
@@ -121,10 +133,31 @@ window.__fcCriar = async function() {
   document.getElementById('fc-resposta').value = '';
   document.getElementById('fc-explicacao').value = '';
   document.getElementById('fc-link').value = '';
+  if (fileInput) { fileInput.value = ''; }
+  document.getElementById('fc-img-preview').innerHTML = '';
 
   flashMsg('fc-success', 'Flashcard criado! Ele já está disponível para revisão hoje.');
   await renderFlashcardsTab();
   if (typeof window.__refreshRevisarHojeBadge === 'function') window.__refreshRevisarHojeBadge();
+};
+
+function lerArquivoComoBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result); // inclui o prefixo data:image/...;base64,
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+window.__fcPreviewImagem = function() {
+  const fileInput = document.getElementById('fc-imagem');
+  const preview = document.getElementById('fc-img-preview');
+  if (!fileInput.files || !fileInput.files[0]) { preview.innerHTML = ''; return; }
+  const file = fileInput.files[0];
+  const url = URL.createObjectURL(file);
+  preview.innerHTML = `<img src="${url}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px;border:1px solid var(--bo)">
+    <div style="font-size:11px;color:var(--t3);margin-top:4px">${(file.size/1024).toFixed(0)}KB — ${file.name}</div>`;
 };
 
 function flashMsg(id, msg) {
@@ -195,6 +228,7 @@ export async function renderRevisarHojeTab() {
 
   let html = '';
   vencidos.forEach((c, i) => {
+    const imgHtml = c.imagemBase64 ? `<div style="margin-bottom:12px"><img src="${c.imagemBase64}" style="max-width:100%;border-radius:8px;border:1px solid var(--bo)"></div>` : '';
     html += `
     <div class="fc-card" id="rev-card-${c.id}">
       <div class="fc-header">
@@ -202,6 +236,7 @@ export async function renderRevisarHojeTab() {
         <span style="font-size:11px;color:var(--t3)">${c.topico}</span>
       </div>
       <div class="fc-question">${c.pergunta}</div>
+      ${imgHtml}
       <button class="btn fc-reveal-btn" onclick="window.__revRevelar('${c.id}')">Mostrar resposta</button>
       <div class="fc-answer" id="rev-answer-${c.id}">
         <div class="fc-answer-label">Resposta</div>
