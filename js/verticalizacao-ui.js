@@ -6,12 +6,14 @@ import {
   removerLinkTopico, editarLinkTopico, getLinksTopico, montarDadosTopico, contarStatusMateria,
   getStatusInfo, STATUS_TOPICO
 } from './verticalizacao.js';
-import { listaMaterias, listaTopicos } from './edital.js';
+import { listaMaterias, listaTopicos, getMeta } from './edital.js';
+import { historicoMateria } from './sessoes.js';
 
 let _edital = null;
 let _sessoes = [];
 let _vert = null;
 const _openState = {};
+const _charts = {}; // instâncias de Chart.js por matéria, para destruir/atualizar sem duplicar
 
 export function initVerticalUI(edital, sessoes) {
   _edital = edital;
@@ -60,11 +62,57 @@ function renderListaMaterias() {
         </div>
       </div>
       <div class="admin-materia-body ${isOpen ? 'open' : ''}">
+        ${isOpen ? `<div class="card" style="margin-bottom:14px">
+          <div class="ct">Evolução geral — ${materia}</div>
+          <div style="position:relative;width:100%;height:160px">
+            <canvas id="vert-chart-${slug(materia)}" role="img" aria-label="Evolução do aproveitamento em ${materia}"></canvas>
+          </div>
+        </div>` : ''}
         ${topicos.map(t => renderTopicoCard(materia, t)).join('')}
       </div>
     </div>`;
   });
   container.innerHTML = html;
+
+  // Renderiza os gráficos das matérias abertas após o HTML estar no DOM
+  materias.forEach(materia => {
+    if (_openState[materia]) renderGraficoMateria(materia);
+  });
+}
+
+function renderGraficoMateria(materia) {
+  const ctx = document.getElementById('vert-chart-' + slug(materia));
+  if (!ctx) return;
+  const historico = historicoMateria(_sessoes, materia);
+  const meta = getMeta(_edital, materia);
+
+  if (!historico.length) {
+    const parent = ctx.parentElement;
+    parent.innerHTML = '<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center">Sem sessões de questões registradas ainda nesta matéria.</div>';
+    return;
+  }
+
+  const labels = historico.map(s => s.data);
+  const data = historico.map(s => s.pct);
+
+  if (_charts[materia]) {
+    _charts[materia].destroy();
+  }
+  _charts[materia] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Aproveit.', data, borderColor: '#7F77DD', backgroundColor: 'rgba(127,119,221,0.08)', tension: .3, pointRadius: 3, pointBackgroundColor: '#7F77DD', fill: true },
+      { label: 'Meta', data: labels.map(() => meta), borderColor: '#E24B4A', borderDash: [5, 3], pointRadius: 0, borderWidth: 1.5, fill: false }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0, max: 100, ticks: { callback: v => v + '%', font: { size: 10 } } },
+        x: { ticks: { font: { size: 9 }, autoSkip: true, maxRotation: 0 }, grid: { display: false } }
+      }
+    }
+  });
 }
 
 function renderTopicoCard(materia, topico) {
@@ -122,7 +170,12 @@ function renderTopicoCard(materia, topico) {
 }
 
 window.__vertToggle = function(materia) {
-  _openState[materia] = !_openState[materia];
+  const estavaAberto = _openState[materia];
+  _openState[materia] = !estavaAberto;
+  if (estavaAberto && _charts[materia]) {
+    _charts[materia].destroy();
+    delete _charts[materia];
+  }
   renderListaMaterias();
 };
 

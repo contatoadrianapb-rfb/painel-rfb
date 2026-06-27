@@ -165,6 +165,14 @@ export function topicosFracos(sessoes, edital) {
 // Histórico cronológico de sessões de questões de um tópico específico,
 // usado na aba Edital Verticalizado para mostrar a evolução do desempenho
 // (ex: 5/15 numa semana, 13/15 na semana seguinte).
+// Sessões de questões de uma matéria específica, em ordem cronológica —
+// usado no gráfico de evolução geral da matéria no Edital Verticalizado.
+export function historicoMateria(sessoes, materia) {
+  return sessoesQuestoes(sessoes)
+    .filter(s => s.materia === materia)
+    .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+}
+
 export function historicoTopico(sessoes, materia, topico) {
   return sessoesQuestoes(sessoes)
     .filter(s => s.materia === materia && s.topico === topico)
