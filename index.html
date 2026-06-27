@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Painel de Estudos — Auditor Fiscal RFB</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="CSS/style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 <body>
@@ -37,6 +37,7 @@
     <button class="tab" data-tab="flashcards" onclick="window.__mudarAba('flashcards', this)">Flashcards</button>
     <button class="tab" data-tab="cronograma" onclick="window.__mudarAba('cronograma', this)">Cronograma</button>
     <button class="tab" data-tab="frequencia" onclick="window.__mudarAba('frequencia', this)">Frequência</button>
+    <button class="tab" data-tab="vertical" onclick="window.__mudarAba('vertical', this)">Edital Verticalizado</button>
     <button class="tab" data-tab="painel" onclick="window.__mudarAba('painel', this)">Painel Geral</button>
     <button class="tab" data-tab="historico" onclick="window.__mudarAba('historico', this)">Histórico</button>
     <button class="tab" data-tab="relatorio" onclick="window.__mudarAba('relatorio', this)">Relatório Semanal</button>
@@ -221,6 +222,15 @@
     <div class="card">
       <div id="freq-ranking"><div class="empty">Selecione uma matéria acima para ver o ranking de tópicos.</div></div>
     </div>
+  </div>
+
+  <!-- EDITAL VERTICALIZADO -->
+  <div class="view" id="view-vertical">
+    <div class="card">
+      <div class="ct">Edital verticalizado</div>
+      <p class="hint">Acompanhe o status de cada tópico, registre os links do seu caderno de questões no Tec Concursos e veja a evolução do seu aproveitamento ao longo do tempo. O percentual vem automaticamente das sessões registradas em "Registrar Sessão".</p>
+    </div>
+    <div id="vert-lista"><div class="empty">Carregando...</div></div>
   </div>
 
   <!-- PAINEL GERAL -->
