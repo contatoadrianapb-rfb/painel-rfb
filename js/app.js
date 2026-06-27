@@ -11,6 +11,7 @@ import {
 } from './sessoes-ui.js';
 import { initCronogramaUI, atualizarContextoCronograma, renderCronogramaTab } from './cronograma-ui.js';
 import { initFrequenciaUI, atualizarContextoFrequencia, renderFrequenciaTab } from './frequencia-ui.js';
+import { initVerticalUI, atualizarContextoVertical, renderVerticalTab } from './verticalizacao-ui.js';
 
 let _edital = null;
 let _sessoes = [];
@@ -37,6 +38,7 @@ async function onAdminChange(novoEdital) {
   atualizarContextoFlashcards(_edital, _sessoes);
   atualizarContextoCronograma(_edital, _sessoes);
   atualizarContextoFrequencia(_edital);
+  atualizarContextoVertical(_edital, _sessoes);
   atualizarBannerEdital();
 }
 
@@ -75,6 +77,7 @@ const ABA_RENDERERS = {
   flashcards: renderFlashcardsTab,
   cronograma: renderCronogramaTab,
   frequencia: renderFrequenciaTab,
+  vertical: renderVerticalTab,
   painel: renderPainelTab,
   historico: renderHistoricoTab,
   relatorio: renderRelatorioTab,
@@ -105,6 +108,7 @@ async function init() {
   initAdminUI(_edital, onAdminChange);
   initCronogramaUI(_edital, _sessoes);
   initFrequenciaUI(_edital);
+  initVerticalUI(_edital, _sessoes);
 
   document.getElementById('hdr-data').textContent =
     new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
